@@ -69,9 +69,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (response.success && response.data) {
         set({ user: response.data, isLoading: false })
       }
-    } catch (err) {
-      api.clearToken()
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false })
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        api.clearToken()
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false })
+      } else {
+        set({ isLoading: false })
+      }
     }
   },
 

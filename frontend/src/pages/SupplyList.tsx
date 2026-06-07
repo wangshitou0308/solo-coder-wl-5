@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useSupplyStore } from '@/store/supplyStore'
-import type { SupplyCategory, SupplyStatus } from '@/types'
+import type { SupplyCategory, SupplyStatus, Supply } from '@/types'
+import api from '@/services/api'
 
 const categoryLabels: Record<SupplyCategory, string> = {
   food: '食品',
@@ -26,9 +27,20 @@ const statusLabels: Record<SupplyStatus, { label: string; className: string }> =
 
 export function SupplyList() {
   const { supplies, isLoading, fetchSupplies } = useSupplyStore()
+  const navigate = useNavigate()
   const [category, setCategory] = useState<string>('all')
   const [status, setStatus] = useState<string>('all')
   const [keyword, setKeyword] = useState('')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState<Partial<Supply>>({
+    name: '',
+    description: '',
+    quantity: 1,
+    unit: '件',
+    category: 'other',
+    community_id: 0,
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     fetchSupplies({
@@ -38,11 +50,41 @@ export function SupplyList() {
     })
   }, [fetchSupplies, category, status, keyword])
 
+  const handleCreate = async () => {
+    try {
+      setIsSubmitting(true)
+      await api.createSupply(createForm)
+      alert('物资发布成功！')
+      setShowCreateModal(false)
+      setCreateForm({
+        name: '',
+        description: '',
+        quantity: 1,
+        unit: '件',
+        category: 'other',
+        community_id: 0,
+      })
+      fetchSupplies({
+        category: category === 'all' ? undefined : category,
+        status: status === 'all' ? undefined : status,
+        keyword: keyword || undefined,
+      })
+    } catch (err) {
+      console.error('发布物资失败', err)
+      alert('发布失败，请重试')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">物资列表</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+        >
           发布物资
         </button>
       </div>
@@ -141,6 +183,95 @@ export function SupplyList() {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">暂无物资</h3>
           <p className="mt-1 text-sm text-gray-500">发布第一个物资开始共享吧</p>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">发布物资</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">物资名称</label>
+                <input
+                  type="text"
+                  value={createForm.name || ''}
+                  onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入物资名称"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">描述</label>
+                <textarea
+                  value={createForm.description || ''}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入物资描述"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">数量</label>
+                  <input
+                    type="number"
+                    value={createForm.quantity || 0}
+                    onChange={(e) => setCreateForm({ ...createForm, quantity: Number(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">单位</label>
+                  <input
+                    type="text"
+                    value={createForm.unit || ''}
+                    onChange={(e) => setCreateForm({ ...createForm, unit: e.target.value })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="如：件、箱、个"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">分类</label>
+                <select
+                  value={createForm.category || 'other'}
+                  onChange={(e) => setCreateForm({ ...createForm, category: e.target.value as SupplyCategory })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {Object.entries(categoryLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">社区ID</label>
+                <input
+                  type="number"
+                  value={createForm.community_id || ''}
+                  onChange={(e) => setCreateForm({ ...createForm, community_id: Number(e.target.value) })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入社区ID"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex space-x-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50"
+                disabled={isSubmitting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '发布中...' : '发布'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

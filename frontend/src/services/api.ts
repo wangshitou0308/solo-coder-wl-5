@@ -35,6 +35,12 @@ class ApiClient {
       },
     })
 
+    const savedToken = localStorage.getItem('token')
+    if (savedToken) {
+      this.token = savedToken
+      this.instance.defaults.headers.common.Authorization = `Bearer ${savedToken}`
+    }
+
     this.setupInterceptors()
   }
 

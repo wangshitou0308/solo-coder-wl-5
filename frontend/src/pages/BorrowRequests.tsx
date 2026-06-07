@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { BorrowRequestStatus, BorrowPriority } from '@/types'
+import { useSearchParams } from 'react-router-dom'
+import type { BorrowRequestStatus, BorrowPriority, BorrowRequest } from '@/types'
 import api from '@/services/api'
 
 const statusLabels: Record<BorrowRequestStatus, { label: string; className: string }> = {
@@ -16,48 +17,66 @@ const priorityLabels: Record<BorrowPriority, { label: string; className: string 
 }
 
 export function BorrowRequests() {
+  const [searchParams] = useSearchParams()
+  const communityId = searchParams.get('communityId')
+  const communityName = searchParams.get('communityName')
   const [status, setStatus] = useState<string>('all')
   const [requests, setRequests] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    supply_id: 0,
+    quantity: 1,
+    purpose: '',
+    priority: 'normal' as BorrowPriority,
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const fetchRequests = async () => {
+    setIsLoading(true)
+    try {
+      const params: any = { status: status === 'all' ? undefined : status }
+      if (communityId) {
+        params.community_id = Number(communityId)
+      }
+      const response = await api.getBorrowRequests(params)
+      if (response.success && response.data) {
+        setRequests(response.data.items || [])
+      }
+    } catch (err) {
+      console.error('获取申请列表失败', err)
+      setTimeout(() => {
+        setRequests([
+          {
+            id: 1,
+            supply_id: 1,
+            requester_id: 1,
+            quantity: 2,
+            purpose: '家庭备用',
+            priority: 'normal',
+            status: 'pending',
+            created_at: '2024-01-15 10:30',
+          },
+          {
+            id: 2,
+            supply_id: 2,
+            requester_id: 2,
+            quantity: 5,
+            purpose: '应急储备',
+            priority: 'urgent',
+            status: 'approved',
+            created_at: '2024-01-14 14:20',
+          },
+        ])
+      }, 500)
+    } finally {
+      setTimeout(() => setIsLoading(false), 500)
+    }
+  }
 
   useEffect(() => {
-    const fetchRequests = async () => {
-      try {
-        const response = await api.getBorrowRequests({ status: status === 'all' ? undefined : status })
-        if (response.success && response.data) {
-          setRequests(response.data.items || [])
-        }
-      } catch (err) {
-        setTimeout(() => {
-          setRequests([
-            {
-              id: 1,
-              supply_id: 1,
-              requester_id: 1,
-              quantity: 2,
-              purpose: '家庭备用',
-              priority: 'normal',
-              status: 'pending',
-              created_at: '2024-01-15 10:30',
-            },
-            {
-              id: 2,
-              supply_id: 2,
-              requester_id: 2,
-              quantity: 5,
-              purpose: '应急储备',
-              priority: 'urgent',
-              status: 'approved',
-              created_at: '2024-01-14 14:20',
-            },
-          ])
-        }, 500)
-      } finally {
-        setTimeout(() => setIsLoading(false), 500)
-      }
-    }
     fetchRequests()
-  }, [status])
+  }, [status, communityId])
 
   const handleApprove = async (id: number) => {
     try {
@@ -86,11 +105,42 @@ export function BorrowRequests() {
     }
   }
 
+  const handleReject = async (id: number) => {
+    try {
+      console.log('拒绝申请', id)
+      alert(`已拒绝申请 #${id}`)
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected' } : r))
+    } catch (err) {
+      console.error('拒绝失败', err)
+    }
+  }
+
+  const handleCreate = async () => {
+    try {
+      setIsSubmitting(true)
+      await api.createBorrowRequest(createForm)
+      alert('申请创建成功！')
+      setShowCreateModal(false)
+      setCreateForm({ supply_id: 0, quantity: 1, purpose: '', priority: 'normal' })
+      fetchRequests()
+    } catch (err) {
+      console.error('创建申请失败', err)
+      alert('创建失败，请重试')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const pageTitle = communityName ? `${communityName}的借用申请` : '借用申请'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">借用申请</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+        >
           新建申请
         </button>
       </div>
@@ -153,7 +203,10 @@ export function BorrowRequests() {
                           >
                             批准
                           </button>
-                          <button className="text-red-600 hover:text-red-800 text-sm font-medium">
+                          <button 
+                            onClick={() => handleReject(request.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          >
                             拒绝
                           </button>
                         </div>
@@ -204,6 +257,74 @@ export function BorrowRequests() {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">暂无借用申请</h3>
           <p className="mt-1 text-sm text-gray-500">创建第一个借用申请吧</p>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">新建借用申请</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">物资ID</label>
+                <input
+                  type="number"
+                  value={createForm.supply_id || ''}
+                  onChange={(e) => setCreateForm({ ...createForm, supply_id: Number(e.target.value) })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入物资ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">数量</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={createForm.quantity}
+                  onChange={(e) => setCreateForm({ ...createForm, quantity: Number(e.target.value) })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">用途说明</label>
+                <textarea
+                  value={createForm.purpose}
+                  onChange={(e) => setCreateForm({ ...createForm, purpose: e.target.value })}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请说明借用用途..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">优先级</label>
+                <select
+                  value={createForm.priority}
+                  onChange={(e) => setCreateForm({ ...createForm, priority: e.target.value as BorrowPriority })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="normal">普通</option>
+                  <option value="urgent">紧急</option>
+                  <option value="disaster">灾害</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-6 flex space-x-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50"
+                disabled={isSubmitting}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? '提交中...' : '提交'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

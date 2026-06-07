@@ -1,18 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
+import api from '@/services/api'
 
 export function Profile() {
-  const { user } = useAuthStore()
+  const { user, getCurrentUser } = useAuthStore()
   const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState({
     username: user?.username || '',
     email: user?.email || '',
     phone: user?.phone || '',
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        username: user.username || '',
+        email: user.email || '',
+        phone: user.phone || '',
+      })
+    }
+  }, [user])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsEditing(false)
+    try {
+      setIsSaving(true)
+      const response = await api.updateProfile(formData)
+      if (response.success) {
+        await getCurrentUser()
+        alert('保存成功！')
+        setIsEditing(false)
+      } else {
+        alert(response.message || '保存失败')
+      }
+    } catch (err: any) {
+      console.error('保存失败', err)
+      alert(err.response?.data?.message || '保存失败，请重试')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -99,14 +126,16 @@ export function Profile() {
               <div className="flex space-x-4">
                 <button
                   type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  disabled={isSaving}
                 >
-                  保存
+                  {isSaving ? '保存中...' : '保存'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsEditing(false)}
                   className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
+                  disabled={isSaving}
                 >
                   取消
                 </button>

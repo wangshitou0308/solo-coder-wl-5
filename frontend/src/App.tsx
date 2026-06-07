@@ -13,7 +13,8 @@ import { BorrowRequests } from '@/pages/BorrowRequests'
 import { Alerts } from '@/pages/Alerts'
 import { Profile } from '@/pages/Profile'
 import { useAuthStore } from '@/store/authStore'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import api from '@/services/api'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -21,13 +22,35 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const { isAuthenticated, getCurrentUser, token } = useAuthStore()
+  const { getCurrentUser } = useAuthStore()
+  const [isInitializing, setIsInitializing] = useState(true)
 
   useEffect(() => {
-    if (token && isAuthenticated) {
-      getCurrentUser()
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem('token')
+      if (savedToken) {
+        api.getToken()
+        try {
+          await getCurrentUser()
+        } catch (err) {
+          console.error('初始化用户信息失败', err)
+        }
+      }
+      setIsInitializing(false)
     }
-  }, [token, isAuthenticated, getCurrentUser])
+    initAuth()
+  }, [getCurrentUser])
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-500">加载中...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <Router>
